@@ -1,0 +1,128 @@
+---
+title: "Combined"
+author: "Jake Dougherty"
+date: "1/21/2020"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(shiny)
+library(tidyverse)
+library(jsonlite)
+library(DT)
+```
+
+```{r}
+
+
+lm_ws_mod <- read_rds("ws_lm.RDS")
+lm_gp_mod <- read_rds("gp_lm.RDS")
+lm_gs_mod <- read_rds("gs_lm.RDS")
+lm_per_mod <- read_rds("per_lm.RDS")
+
+  
+```
+
+
+```{r}
+
+ui <- fluidPage(
+  sidebarLayout(
+    sidebarPanel(
+      fileInput("file1", "upload draft json file",
+        accept = c(
+          "application/json",
+          "application/JavaScript-Object-Notation,text/plain",
+          ".json")
+        ),
+      tags$hr(),
+      checkboxInput("header", "Scaled", TRUE)
+    ),
+    mainPanel(
+      DTOutput("contents")
+    )
+  )
+)
+
+```
+
+
+```{r}
+
+server <- function(input, output) {
+  # output$contents <- renderTable({
+    output$contents <- renderDT({
+      
+    inFile <- input$file1
+    wted <- input$header
+
+    if (is.null(inFile))
+      return(NULL)
+
+  draft_input <- fromJSON(inFile$datapath)[["players"]] # Input file
+
+  draft_input_f <- draft_input[["ratings"]] %>% 
+  bind_rows() %>% 
+  select(-fuzz, -season, -skills) 
+
+  draft_input_f$name <- paste(draft_input$firstName, draft_input$lastName)
+  
+  
+  fin_df_all <- draft_input_f %>%
+      mutate(
+      ws_pred = predict(lm_ws_mod,draft_input_f),
+      per_pred = predict(lm_per_mod,draft_input_f),
+      gp_pred = predict(lm_gp_mod,draft_input_f),
+      gs_pred = predict(lm_gs_mod,draft_input_f)
+      )
+
+  if(input$header){
+    
+  fin_df <- fin_df_all %>%
+    mutate(
+      ws_pred = scale(ws_pred, center = T),
+      per_pred = scale(per_pred, center = T),
+      gp_pred = scale(gp_pred, center = T),
+      gs_pred = scale(gs_pred, center = T),
+          ) %>% 
+    select(name, ovr, pot, ws_pred:gs_pred) %>% 
+    mutate_if(is.numeric, function(x) round(x,2) ) %>% 
+    arrange(desc(ovr))
+  
+  }else{
+    
+    fin_df <- fin_df_all %>% 
+  select(name, ovr, pot, ws_pred:gs_pred) %>% 
+  mutate_if(is.numeric, function(x) round(x,2) ) %>% 
+  arrange(desc(ovr))
+    
+}
+
+  
+fin_df
+
+  })
+}
+
+```
+
+
+```{r}
+shinyApp(ui, server)
+
+```
+
+
+
+```{r}
+
+
+```
+
+
+
+
+
